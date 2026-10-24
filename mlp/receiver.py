@@ -23,3 +23,37 @@ class MediaReceiverMachine:
 
     def build_ack(self):
         return bytes([0])
+
+
+class InputToken:
+    def __init__(self, kind, code):
+        self.kind = kind
+        self.code = code
+
+    @staticmethod
+    def key(code):
+        return InputToken("key", code)
+
+
+class InputEvent:
+    def __init__(self, code, pressed, seq=0):
+        self.code = code
+        self.pressed = pressed
+        self.seq = seq
+
+
+class InputQueue:
+    def __init__(self):
+        self.events = []
+
+    def submit(self, e):
+        self.events.append(e)
+
+    def __len__(self):
+        return len(self.events)
+
+
+class ResumeRejectReason:
+    OK = "ok"
+    REJECTED = "rejected"
+    EXPIRED = "expired"
