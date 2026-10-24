@@ -120,3 +120,21 @@ class PathMigration:
 
     def is_probing(self):
         return self.state == MigrationState.PROBING
+
+
+class QosTier:
+    BACKGROUND = 0
+    BEST_EFFORT = 1
+    INTERACTIVE = 2
+    REALTIME = 3
+
+    _PRIO = {0: 7, 1: 6, 2: 5, 3: 2}
+    _WEIGHT = {0: 1, 1: 2, 2: 4, 3: 8}
+
+    @staticmethod
+    def mlp_priority(tier):
+        return QosTier._PRIO[tier]
+
+    @staticmethod
+    def weight(tier):
+        return QosTier._WEIGHT[tier]

@@ -56,3 +56,9 @@ def test_fec():
     rec = recover_one(1, received, parity)
     assert rec is not None
     assert rec[:3] == data[1]
+
+
+def test_qos():
+    from mlp.receiver import QosTier
+    assert QosTier.mlp_priority(QosTier.REALTIME) < QosTier.mlp_priority(QosTier.INTERACTIVE)
+    assert QosTier.weight(QosTier.REALTIME) > QosTier.weight(QosTier.INTERACTIVE)
