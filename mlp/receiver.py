@@ -175,3 +175,48 @@ class LossDetector:
 
     def lost_count(self):
         return len(self.lost)
+
+
+class OpenObject:
+    def __init__(self, oid, declared, cls=2, flags=0, priority=6, ext=None):
+        self.object_id = oid
+        self.declared = declared
+        self.cls = cls
+        self.flags = flags
+        self.priority = priority
+        self.ext = ext
+        self.parts = [None] * declared
+        self.received = 0
+        self.bytes = 0
+
+
+class ObjectAssembler:
+    def __init__(self):
+        self.open = {}
+
+    def accept(self, frag):
+        oid = frag.header.object_id
+        if oid not in self.open:
+            self.open[oid] = OpenObject(oid, frag.header.fragment_count, frag.header.cls,
+                                       frag.header.flags, frag.header.priority, frag.ext)
+        obj = self.open[oid]
+        if frag.header.fragment_count != obj.declared:
+            return None, False
+        idx = frag.header.fragment_index
+        if obj.parts[idx] is not None:
+            return None, False  # duplicate
+        obj.parts[idx] = frag.payload
+        obj.received += 1
+        obj.bytes += len(frag.payload)
+        if idx == 0:
+            obj.ext = frag.ext
+        if obj.received >= obj.declared:
+            del self.open[oid]
+            return obj, True
+        return None, False
+
+    def is_open(self, oid):
+        return oid in self.open
+
+    def open_count(self):
+        return len(self.open)

@@ -72,3 +72,19 @@ def test_loss_detector():
     ld.on_ack([0, 1, 2, 4, 5, 6, 7, 8, 9])
     assert ld.is_lost(3)
     assert ld.lost_count() == 1
+
+
+def test_assembly():
+    from mlp.pdu import Fragment, FragmentHeader
+    from mlp.receiver import ObjectAssembler
+    a = ObjectAssembler()
+    f1 = Fragment(FragmentHeader(object_id=1, fragment_index=0, fragment_count=2, payload_len=4), None, bytes([1,2,3,4]))
+    f1.ext = __import__("mlp.pdu", fromlist=["HeaderExt"]).HeaderExt()
+    f2 = Fragment(FragmentHeader(object_id=1, fragment_index=1, fragment_count=2, payload_len=4), None, bytes([5,6,7,8]))
+    f2.ext = __import__("mlp.pdu", fromlist=["HeaderExt"]).HeaderExt()
+    obj, done = a.accept(f1)
+    assert not done
+    obj, done = a.accept(f2)
+    assert done
+    assert obj.received == 2
+    assert a.open_count() == 0
