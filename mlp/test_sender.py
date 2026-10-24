@@ -46,3 +46,13 @@ def test_bwe():
     assert est.pace_bps == 100000
     e.set_rtt(100)
     assert e.rtt_ms == 100
+
+
+def test_fec():
+    from mlp.sender import xor_parity, recover_one
+    data = [bytes([1, 2, 3]), bytes([4, 5, 6]), bytes([7, 8, 9])]
+    parity = xor_parity(data)
+    received = [data[0], None, data[2]]
+    rec = recover_one(1, received, parity)
+    assert rec is not None
+    assert rec[:3] == data[1]

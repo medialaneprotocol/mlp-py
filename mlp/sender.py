@@ -119,3 +119,26 @@ class BandwidthEstimator:
 
     def set_rtt(self, ms):
         self.rtt_ms = ms
+
+
+def xor_parity(data):
+    max_len = max((len(d) for d in data), default=0)
+    parity = bytearray(max_len)
+    for d in data:
+        for i, b in enumerate(d):
+            parity[i] ^= b
+    return bytes(parity)
+
+
+def recover_one(missing_index, data, parity):
+    missing = sum(1 for d in data if d is None)
+    if missing != 1:
+        return None
+    out = bytearray(parity)
+    for i, d in enumerate(data):
+        if i == missing_index or d is None:
+            continue
+        for j, b in enumerate(d):
+            if j < len(out):
+                out[j] ^= b
+    return bytes(out)

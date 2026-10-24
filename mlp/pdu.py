@@ -10,6 +10,7 @@ CLASS_CURSOR = 1
 CLASS_MEDIA = 2
 CLASS_FEEDBACK = 3
 CLASS_PATH = 4
+CLASS_DATAGRAM = 5
 
 PRIO_CONTROL = 0
 PRIO_INPUT = 1
@@ -28,6 +29,7 @@ TLV = {
     "SEND_EPOCH_MS": 0x07,
     "CELL_COUNT": 0x08,
     "BUDGET_BYTES": 0x09,
+    "STREAM_ID": 0x10,
     "GREASE": 0x7F,
 }
 
@@ -101,7 +103,7 @@ class HeaderExt:
 
 class UpdateMeta:
     def __init__(self, update_id=0, update_base=0, part_index=0, part_count=1,
-                 update_bytes=0, chain_epoch=0, reflects_input_seq=0, send_epoch_ms=0):
+                 update_bytes=0, chain_epoch=0, reflects_input_seq=0, stream_id=0, send_epoch_ms=0):
         self.update_id = update_id
         self.update_base = update_base
         self.part_index = part_index
@@ -109,6 +111,7 @@ class UpdateMeta:
         self.update_bytes = update_bytes
         self.chain_epoch = chain_epoch
         self.reflects_input_seq = reflects_input_seq
+        self.stream_id = stream_id
         self.send_epoch_ms = send_epoch_ms
 
     def to_ext(self):
@@ -119,6 +122,7 @@ class UpdateMeta:
         h.push_u32(TLV["UPDATE_BYTES"], self.update_bytes)
         h.push_u32(TLV["CHAIN_EPOCH"], self.chain_epoch)
         h.push_u64(TLV["REFLECTS_INPUT_SEQ"], self.reflects_input_seq)
+        h.push_u32(TLV["STREAM_ID"], self.stream_id)
         h.push_u64(TLV["SEND_EPOCH_MS"], self.send_epoch_ms)
         return h
 
@@ -133,6 +137,7 @@ class UpdateMeta:
         ubytes = ext.get_u32(TLV["UPDATE_BYTES"])
         ce = ext.get_u32(TLV["CHAIN_EPOCH"])
         ris = ext.get_u64(TLV["REFLECTS_INPUT_SEQ"])
+        sid = ext.get_u32(TLV["STREAM_ID"])
         sem = ext.get_u64(TLV["SEND_EPOCH_MS"])
         return cls(
             update_id=uid,
@@ -142,6 +147,7 @@ class UpdateMeta:
             update_bytes=ubytes if ubytes is not None else 0,
             chain_epoch=ce if ce is not None else 0,
             reflects_input_seq=ris if ris is not None else 0,
+            stream_id=sid if sid is not None else 0,
             send_epoch_ms=sem if sem is not None else 0,
         )
 
