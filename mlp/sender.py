@@ -78,3 +78,16 @@ class CellAccounting:
 
     def converged(self):
         return len(self.pending) == 0
+
+
+class Scheduler:
+    def __init__(self, grid):
+        self.grid = grid
+
+    def plan(self, changed):
+        return list(changed)
+
+    def max_chunks_for(self, datagram, loss_ratio):
+        if datagram:
+            return 1
+        return 8

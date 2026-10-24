@@ -25,3 +25,14 @@ def test_cell_accounting():
     assert not a.converged()
     a.mark_applied([2])
     assert a.converged()
+
+
+def test_scheduler():
+    from mlp.sender import CellGrid, Scheduler
+    g = CellGrid(320, 240, 64)
+    s = Scheduler(g)
+    cells = [0, 1, 5, 9]
+    out = s.plan(cells)
+    assert out == cells
+    assert s.max_chunks_for(False, 0.1) == 8
+    assert s.max_chunks_for(True, 0.1) == 1
