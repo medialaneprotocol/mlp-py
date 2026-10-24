@@ -30,6 +30,7 @@ TLV = {
     "CELL_COUNT": 0x08,
     "BUDGET_BYTES": 0x09,
     "STREAM_ID": 0x10,
+    "PATH_ID": 0x13,
     "GREASE": 0x7F,
 }
 
@@ -43,6 +44,9 @@ class HeaderExt:
 
     def push_u32(self, kind, v):
         self.entries.append((kind, struct.pack("<I", v)))
+
+    def push_u8(self, kind, v):
+        self.entries.append((kind, bytes([v])))
 
     def push_u16_pair(self, kind, a, b):
         self.entries.append((kind, struct.pack("<HH", a, b)))
@@ -64,6 +68,12 @@ class HeaderExt:
         if v is None or len(v) != 4:
             return None
         return struct.unpack("<I", v)[0]
+
+    def get_u8(self, kind):
+        v = self.get(kind)
+        if v is None or len(v) != 1:
+            return None
+        return v[0]
 
     def get_u16_pair(self, kind):
         v = self.get(kind)
@@ -103,7 +113,7 @@ class HeaderExt:
 
 class UpdateMeta:
     def __init__(self, update_id=0, update_base=0, part_index=0, part_count=1,
-                 update_bytes=0, chain_epoch=0, reflects_input_seq=0, stream_id=0, send_epoch_ms=0):
+                 update_bytes=0, chain_epoch=0, reflects_input_seq=0, stream_id=0, path_id=0, send_epoch_ms=0):
         self.update_id = update_id
         self.update_base = update_base
         self.part_index = part_index
@@ -112,6 +122,7 @@ class UpdateMeta:
         self.chain_epoch = chain_epoch
         self.reflects_input_seq = reflects_input_seq
         self.stream_id = stream_id
+        self.path_id = path_id
         self.send_epoch_ms = send_epoch_ms
 
     def to_ext(self):
@@ -123,6 +134,7 @@ class UpdateMeta:
         h.push_u32(TLV["CHAIN_EPOCH"], self.chain_epoch)
         h.push_u64(TLV["REFLECTS_INPUT_SEQ"], self.reflects_input_seq)
         h.push_u32(TLV["STREAM_ID"], self.stream_id)
+        h.push_u8(TLV["PATH_ID"], self.path_id)
         h.push_u64(TLV["SEND_EPOCH_MS"], self.send_epoch_ms)
         return h
 
@@ -138,6 +150,7 @@ class UpdateMeta:
         ce = ext.get_u32(TLV["CHAIN_EPOCH"])
         ris = ext.get_u64(TLV["REFLECTS_INPUT_SEQ"])
         sid = ext.get_u32(TLV["STREAM_ID"])
+        pid = ext.get_u8(TLV["PATH_ID"])
         sem = ext.get_u64(TLV["SEND_EPOCH_MS"])
         return cls(
             update_id=uid,
@@ -148,6 +161,7 @@ class UpdateMeta:
             chain_epoch=ce if ce is not None else 0,
             reflects_input_seq=ris if ris is not None else 0,
             stream_id=sid if sid is not None else 0,
+            path_id=pid if pid is not None else 0,
             send_epoch_ms=sem if sem is not None else 0,
         )
 
