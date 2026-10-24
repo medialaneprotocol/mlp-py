@@ -88,3 +88,14 @@ def test_assembly():
     assert done
     assert obj.received == 2
     assert a.open_count() == 0
+
+
+def test_metrics():
+    from mlp.receiver import PrometheusTelemetry
+    t = PrometheusTelemetry()
+    t.record_fragment_sent(100)
+    t.record_update_applied()
+    out = t.render()
+    assert "mlp_fragments_sent_total 1" in out
+    assert "mlp_bytes_sent_total 100" in out
+    assert "mlp_updates_applied_total 1" in out

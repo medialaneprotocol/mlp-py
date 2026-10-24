@@ -241,3 +241,51 @@ class FullMediaReceiver:
 
     def converged(self):
         return self.accounting.converged() if self.accounting else True
+
+
+class PrometheusTelemetry:
+    def __init__(self):
+        self.fragments_sent = 0
+        self.fragments_received = 0
+        self.bytes_sent = 0
+        self.bytes_received = 0
+        self.updates_applied = 0
+        self.convergences = 0
+        self.losses = 0
+        self.echoes = 0
+
+    def record_fragment_sent(self, n):
+        self.fragments_sent += 1
+        self.bytes_sent += n
+
+    def record_fragment_received(self, n):
+        self.fragments_received += 1
+        self.bytes_received += n
+
+    def record_update_applied(self):
+        self.updates_applied += 1
+
+    def record_convergence(self):
+        self.convergences += 1
+
+    def record_loss(self):
+        self.losses += 1
+
+    def record_echo(self):
+        self.echoes += 1
+
+    def render(self):
+        return (
+            "# HELP mlp_fragments_sent_total Total fragments sent.\n"
+            "# TYPE mlp_fragments_sent_total counter\n"
+            f"mlp_fragments_sent_total {self.fragments_sent}\n"
+            "# HELP mlp_bytes_sent_total Total bytes sent.\n"
+            "# TYPE mlp_bytes_sent_total counter\n"
+            f"mlp_bytes_sent_total {self.bytes_sent}\n"
+            "# HELP mlp_updates_applied_total Total updates applied.\n"
+            "# TYPE mlp_updates_applied_total counter\n"
+            f"mlp_updates_applied_total {self.updates_applied}\n"
+            "# HELP mlp_convergences_total Total convergences.\n"
+            "# TYPE mlp_convergences_total counter\n"
+            f"mlp_convergences_total {self.convergences}\n"
+        )
