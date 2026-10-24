@@ -55,3 +55,26 @@ class MediaSenderMachine:
             if len(req.payload) == 0:
                 break
         return frags
+
+
+class CellAccounting:
+    def __init__(self, grid):
+        self.grid = grid
+        self.pending = set()
+        self.applied = set()
+
+    def mark_pending(self, cells):
+        for c in cells:
+            self.pending.add(c)
+            self.applied.discard(c)
+
+    def mark_applied(self, cells):
+        for c in cells:
+            self.pending.discard(c)
+            self.applied.add(c)
+
+    def pending_count(self):
+        return len(self.pending)
+
+    def converged(self):
+        return len(self.pending) == 0

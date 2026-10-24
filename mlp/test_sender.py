@@ -12,3 +12,16 @@ def test_sender_enqueue():
         f2, n = Fragment.parse(b)
         assert n == len(b)
         assert f2 is not None
+
+
+def test_cell_accounting():
+    from mlp.sender import CellGrid, CellAccounting
+    g = CellGrid(320, 240, 64)
+    a = CellAccounting(g)
+    a.mark_pending([0, 1, 2])
+    assert a.pending_count() == 3
+    a.mark_applied([0, 1])
+    assert a.pending_count() == 1
+    assert not a.converged()
+    a.mark_applied([2])
+    assert a.converged()
