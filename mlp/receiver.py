@@ -466,3 +466,58 @@ class Transmit:
     def __init__(self, to, data):
         self.to = to
         self.data = data
+
+
+class LaneLifecycle:
+    def __init__(self):
+        self.state = 0
+        self.parked = False
+        self.converged = False
+        self.pending_frac = 0.0
+        self.last_progress_ms = None
+        self.stale_budget_ms = 3000
+        self.no_feedback = False
+        self.loss_ratio = 0.0
+        self.loss_degraded = False
+        self.disabled = False
+
+    def set_active(self):
+        self.state = 2
+        self.parked = False
+
+    def set_parked(self):
+        self.state = 3
+        self.parked = True
+
+    def is_parked(self):
+        return self.parked
+
+    def set_converged(self, v):
+        self.converged = v
+
+    def set_loss_ratio(self, r):
+        self.loss_ratio = r
+        self.loss_degraded = r > 0.05
+
+
+class ResumeManager:
+    def __init__(self):
+        self.parked = False
+        self.last_applied_id = 0
+        self.chain_epoch = 0
+        self.pending_cells = 0
+
+    def park(self, last_applied_id, chain_epoch, pending_cells):
+        self.parked = True
+        self.last_applied_id = last_applied_id
+        self.chain_epoch = chain_epoch
+        self.pending_cells = pending_cells
+
+    def resume(self):
+        if not self.parked:
+            return 0, 0, 0, False
+        self.parked = False
+        return self.last_applied_id, self.chain_epoch, self.pending_cells, True
+
+    def is_parked(self):
+        return self.parked
