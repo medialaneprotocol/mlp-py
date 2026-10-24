@@ -36,3 +36,13 @@ def test_scheduler():
     assert out == cells
     assert s.max_chunks_for(False, 0.1) == 8
     assert s.max_chunks_for(True, 0.1) == 1
+
+
+def test_bwe():
+    from mlp.sender import BweConfig, BandwidthEstimator
+    cfg = BweConfig(pace_floor_bps=100000, requested_fps=30.0, viewer_live=True)
+    e = BandwidthEstimator(cfg)
+    est = e.estimate()
+    assert est.pace_bps == 100000
+    e.set_rtt(100)
+    assert e.rtt_ms == 100

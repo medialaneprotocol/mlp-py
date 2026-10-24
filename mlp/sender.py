@@ -91,3 +91,31 @@ class Scheduler:
         if datagram:
             return 1
         return 8
+
+
+class BweConfig:
+    def __init__(self, pace_floor_bps=100000, requested_fps=30.0, viewer_live=True):
+        self.pace_floor_bps = pace_floor_bps
+        self.requested_fps = requested_fps
+        self.viewer_live = viewer_live
+
+
+class Estimate:
+    def __init__(self, pace_bps=100000, max_object_bytes=8192, loss_ratio=0.0, rtt_ms=50.0, mode="live"):
+        self.pace_bps = pace_bps
+        self.max_object_bytes = max_object_bytes
+        self.loss_ratio = loss_ratio
+        self.rtt_ms = rtt_ms
+        self.mode = mode
+
+
+class BandwidthEstimator:
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.rtt_ms = 50.0
+
+    def estimate(self):
+        return Estimate(pace_bps=self.cfg.pace_floor_bps, rtt_ms=self.rtt_ms)
+
+    def set_rtt(self, ms):
+        self.rtt_ms = ms
