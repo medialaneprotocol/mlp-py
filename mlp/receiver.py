@@ -397,3 +397,72 @@ class PathProber:
 
     def path_results(self, path_id):
         return [r for r in self.results if r.path_id == path_id]
+
+
+class SessionPhase:
+    IDLE = 0
+    HANDSHAKING = 1
+    ACTIVE = 2
+    PARKED = 3
+    RESUMING = 4
+    CLOSING = 5
+    CLOSED = 6
+
+
+class StateMachine:
+    def __init__(self):
+        self.phase = SessionPhase.IDLE
+
+    def transition(self, to):
+        self.phase = to
+        return True
+
+    def is_active(self):
+        return self.phase == SessionPhase.ACTIVE
+
+    def is_closed(self):
+        return self.phase == SessionPhase.CLOSED
+
+
+class LaneMode:
+    ACTIVE = 0
+    PARKED = 1
+    DEGRADED = 2
+
+
+class MediaLaneStateKind:
+    IDLE = 0
+    HANDSHAKING = 1
+    ACTIVE = 2
+    PARKED = 3
+    CLOSING = 4
+    CLOSED = 5
+
+
+class MediaLanePolicy:
+    def __init__(self, media_lane_enabled=True):
+        self.media_lane_enabled = media_lane_enabled
+
+
+class Action:
+    def __init__(self, kind, data=None):
+        self.kind = kind
+        self.data = data or []
+
+
+class ConnectionEvent:
+    def __init__(self, kind, peer=""):
+        self.kind = kind
+        self.peer = peer
+
+
+class Receive:
+    def __init__(self, data, at=0):
+        self.data = data
+        self.at = at
+
+
+class Transmit:
+    def __init__(self, to, data):
+        self.to = to
+        self.data = data
