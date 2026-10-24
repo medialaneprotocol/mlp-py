@@ -62,3 +62,13 @@ def test_qos():
     from mlp.receiver import QosTier
     assert QosTier.mlp_priority(QosTier.REALTIME) < QosTier.mlp_priority(QosTier.INTERACTIVE)
     assert QosTier.weight(QosTier.REALTIME) > QosTier.weight(QosTier.INTERACTIVE)
+
+
+def test_loss_detector():
+    from mlp.receiver import LossDetector
+    ld = LossDetector()
+    for i in range(10):
+        ld.on_send(i)
+    ld.on_ack([0, 1, 2, 4, 5, 6, 7, 8, 9])
+    assert ld.is_lost(3)
+    assert ld.lost_count() == 1
