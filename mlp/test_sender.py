@@ -121,3 +121,13 @@ def test_probe():
     pp.record(ProbeResult(1, 50.0, 0.01, 2000000, now))
     assert pp.best_path() == 1
     assert pp.should_probe(now) is False or True
+
+
+def test_flow_control():
+    from mlp.sender import FlowControl
+    fc = FlowControl(5000, 1000)
+    assert fc.can_send(0, 500)
+    fc.on_send(0, 500)
+    assert fc.can_send(1, 500)
+    fc.on_send(1, 500)
+    assert not fc.can_send(0, 4100)
