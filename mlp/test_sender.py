@@ -131,3 +131,14 @@ def test_flow_control():
     assert fc.can_send(1, 500)
     fc.on_send(1, 500)
     assert not fc.can_send(0, 4100)
+
+
+def test_input_manager():
+    from mlp.receiver import InputManager
+    m = InputManager()
+    m.submit("KeyA", True, 1000)
+    assert m.is_pressed("KeyA")
+    assert m.pressed_count() == 1
+    m.submit("KeyA", False, 1000)
+    assert not m.is_pressed("KeyA")
+    assert len(m.expired(2000)) >= 1

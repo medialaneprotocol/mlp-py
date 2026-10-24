@@ -521,3 +521,31 @@ class ResumeManager:
 
     def is_parked(self):
         return self.parked
+
+
+class InputManager:
+    def __init__(self):
+        self.next_seq = 0
+        self.pressed = set()
+        self.deadlines = {}
+        self.submitted = []
+
+    def submit(self, code, pressed, deadline_ms=0):
+        seq = self.next_seq
+        self.next_seq += 1
+        if pressed:
+            self.pressed.add(code)
+        else:
+            self.pressed.discard(code)
+        self.deadlines[seq] = deadline_ms
+        self.submitted.append(seq)
+        return seq
+
+    def is_pressed(self, code):
+        return code in self.pressed
+
+    def pressed_count(self):
+        return len(self.pressed)
+
+    def expired(self, now_ms):
+        return [seq for seq, dl in self.deadlines.items() if dl != 0 and now_ms > dl]
