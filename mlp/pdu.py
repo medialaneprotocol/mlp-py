@@ -28,6 +28,7 @@ TLV = {
     "SEND_EPOCH_MS": 0x07,
     "CELL_COUNT": 0x08,
     "BUDGET_BYTES": 0x09,
+    "GREASE": 0x7F,
 }
 
 
