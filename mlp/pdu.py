@@ -230,3 +230,22 @@ class Fragment:
             payload_len=payload_len, header_ext_len=ext_len,
         )
         return cls(header, ext, payload), payload_end
+
+
+# Carrier
+CARRIER_WS = 0
+CARRIER_GRPC = 1
+
+
+def carrier_fragment_payload_max(c):
+    if c == CARRIER_WS:
+        return 1024
+    if c == CARRIER_GRPC:
+        return 4096
+    return 1024
+
+
+# Fragment flags
+FLAG_ANCHOR = 1 << 0
+FLAG_ECHO_REQUESTED = 1 << 1
+FLAG_DUPLICATE = 1 << 2
