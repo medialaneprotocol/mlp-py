@@ -1,0 +1,5 @@
+[project]
+name = "mlp-py"
+version = "0.1.0"
+description = "Python reference implementation of the MLP wire format."
+requires-python = ">=3.10"
