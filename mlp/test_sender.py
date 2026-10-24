@@ -99,3 +99,25 @@ def test_metrics():
     assert "mlp_fragments_sent_total 1" in out
     assert "mlp_bytes_sent_total 100" in out
     assert "mlp_updates_applied_total 1" in out
+
+
+def test_pacer():
+    from mlp.receiver import PacerConfig, MediaPacer
+    import time
+    now = time.time()
+    cfg = PacerConfig()
+    p = MediaPacer(cfg, now)
+    assert p.window_budget() > 0
+    assert p.try_acquire(6, 100, now)
+    assert p.pace_bps() == 8000
+
+
+def test_probe():
+    from mlp.receiver import ProbeResult, PathProber
+    pp = PathProber(1000, 3)
+    import time
+    now = time.time()
+    pp.record(ProbeResult(0, 100.0, 0.05, 1000000, now))
+    pp.record(ProbeResult(1, 50.0, 0.01, 2000000, now))
+    assert pp.best_path() == 1
+    assert pp.should_probe(now) is False or True

@@ -289,3 +289,111 @@ class PrometheusTelemetry:
             "# TYPE mlp_convergences_total counter\n"
             f"mlp_convergences_total {self.convergences}\n"
         )
+
+
+class PacerConfig:
+    def __init__(self, pace_bps=8000, max_object_bytes=8192, window_sec=1.0, burst_ratio=1.25, max_grant=16384):
+        self.pace_bps = pace_bps
+        self.max_object_bytes = max_object_bytes
+        self.window_sec = window_sec
+        self.burst_ratio = burst_ratio
+        self.max_grant = max_grant
+
+
+class TokenBucket:
+    def __init__(self, capacity, refill_per_sec, now):
+        self.capacity = capacity
+        self.refill_per_sec = refill_per_sec
+        self.tokens = capacity
+        self.last_refill = now
+
+    def refill(self, now):
+        import time
+        elapsed = now - self.last_refill
+        self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_per_sec)
+        self.last_refill = now
+
+    def try_consume(self, amount):
+        if self.tokens >= amount:
+            self.tokens -= amount
+            return True
+        return False
+
+
+class MediaPacer:
+    def __init__(self, cfg, now):
+        self.cfg = cfg
+        self.bucket = TokenBucket(cfg.pace_bps / 8.0 * cfg.window_sec * cfg.burst_ratio,
+                                 cfg.pace_bps / 8.0, now)
+        self.window = []
+
+    def window_budget(self):
+        rate = self.cfg.pace_bps / 8.0
+        allowance = rate * self.cfg.window_sec * self.cfg.burst_ratio
+        budget = int(allowance)
+        if budget < self.cfg.max_grant:
+            budget = self.cfg.max_grant
+        return budget
+
+    def window_used(self, now):
+        cutoff = now - self.cfg.window_sec
+        return sum(w[1] for w in self.window if w[0] > cutoff)
+
+    def try_acquire(self, cls, nbytes, now):
+        self.bucket.refill(now)
+        budget = self.window_budget()
+        used = self.window_used(now)
+        if used + nbytes > budget:
+            return False
+        watermark = 0
+        if cls >= 5:
+            watermark = int(self.cfg.pace_bps / 8.0 * 0.1)
+        if self.bucket.tokens < nbytes + watermark:
+            return False
+        self.bucket.try_consume(nbytes)
+        self.window.append((now, nbytes))
+        return True
+
+    def pace_bps(self):
+        return self.cfg.pace_bps
+
+    def max_grant_bytes(self):
+        return self.cfg.max_grant
+
+
+class ProbeResult:
+    def __init__(self, path_id, rtt_ms, loss_ratio, goodput_bps, completed_at):
+        self.path_id = path_id
+        self.rtt_ms = rtt_ms
+        self.loss_ratio = loss_ratio
+        self.goodput_bps = goodput_bps
+        self.completed_at = completed_at
+
+
+class PathProber:
+    def __init__(self, interval_ms, probes_per_path):
+        self.interval_ms = interval_ms
+        self.probes_per_path = probes_per_path
+        self.results = []
+        self.last_probe = None
+
+    def should_probe(self, now):
+        if self.last_probe is None:
+            return True
+        return (now - self.last_probe) * 1000 >= self.interval_ms
+
+    def record(self, result):
+        self.results.append(result)
+        self.last_probe = result.completed_at
+
+    def best_path(self):
+        if not self.results:
+            return None
+        best = self.results[0]
+        for r in self.results[1:]:
+            if r.rtt_ms < best.rtt_ms or (r.rtt_ms == best.rtt_ms and r.loss_ratio < best.loss_ratio):
+                best = r
+        return best.path_id
+
+    def path_results(self, path_id):
+        return [r for r in self.results if r.path_id == path_id]
