@@ -220,3 +220,24 @@ class ObjectAssembler:
 
     def open_count(self):
         return len(self.open)
+
+
+class FullMediaReceiver:
+    def __init__(self, w, h):
+        self.canvas = SurfaceCanvas(w, h) if 'SurfaceCanvas' in globals() else None
+        self.assembler = ObjectAssembler()
+        self.accounting = CellAccounting(CellGrid(w, h, 64)) if 'CellGrid' in globals() else None
+        self.applied = 0
+
+    def accept_fragment(self, data):
+        from mlp.pdu import Fragment
+        frag, n = Fragment.parse(data)
+        if n != len(data):
+            raise ValueError("bad length")
+        obj, done = self.assembler.accept(frag)
+        if done:
+            self.applied += 1
+        return obj, done, None
+
+    def converged(self):
+        return self.accounting.converged() if self.accounting else True
