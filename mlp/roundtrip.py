@@ -1,22 +1,39 @@
-def run_roundtrip(w, h, payload):
-    from mlp.sender import CellGrid, MediaSenderMachine, UpdateRequest
-    from mlp.receiver import FullMediaReceiver
-    grid = CellGrid(w, h, 64)
+"""One sender-to-receiver round trip, as a proof."""
+
+from mlp.cells import CellGrid
+from mlp.pdu import CARRIER_WS, UpdateMeta
+from mlp.receiver import MediaReceiverMachine
+from mlp.sender import MediaSenderMachine, UpdateRequest
+
+
+def run_roundtrip(width, height, payload):
+    grid = CellGrid(width, height, 64)
     sender = MediaSenderMachine(grid)
-    receiver = FullMediaReceiver(w, h)
-    frags = sender.enqueue(UpdateRequest(payload=payload), 1200)
-    received = 0
-    for f in frags:
-        b = f.encode()
-        _, _, err = None, None, None
-        try:
-            obj, done, err = receiver.accept_fragment(b)
-            if err is None:
-                received += 1
-        except Exception:
-            pass
-    return {
-        "fragments_sent": len(frags),
-        "fragments_received": received,
-        "converged": receiver.converged(),
+    receiver = MediaReceiverMachine()
+
+    outcome = sender.enqueue(
+        UpdateRequest(payload, cells=[0, 1, 2], anchor=True), CARRIER_WS, 0)
+
+    result = {
+        "fragments_sent": outcome.fragments,
+        "fragments_received": 0,
+        "objects_assembled": 0,
+        "update_id": outcome.update_id,
+        "ack_highest_applied": 0,
+        "payload_match": False,
     }
+    assembled = b""
+    while True:
+        frag = sender.poll_fragment()
+        if frag is None:
+            break
+        obj = receiver.accept_fragment(frag.encode())
+        result["fragments_received"] += 1
+        if obj is not None:
+            assembled = obj.payload()
+            result["objects_assembled"] += 1
+            receiver.note_applied(UpdateMeta.from_ext(obj.ext).update_id)
+
+    result["ack_highest_applied"] = receiver.ack.highest_applied_update_id
+    result["payload_match"] = assembled == payload
+    return result

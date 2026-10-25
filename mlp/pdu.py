@@ -1,18 +1,43 @@
+"""MLP v1 fragment framing — byte level, frozen by the specification.
+
+This module is the Python twin of ``mlp-core``'s ``media::pdu``: the same
+magic, the same classes ``0..=4``, the same flag byte, the same TLV
+registry, the same carrier budgets. What differs here and there is a bug.
+"""
+
 import struct
 
 FRAGMENT_MAGIC = b"MLP\x00"
 MEDIA_PROTOCOL_VERSION = 1
 FRAGMENT_FIXED_HEADER = 22
+MAX_FRAGMENT_COUNT = 4096
 MAX_HEADER_EXT = 256
+MAX_STREAM_FRAGMENT = 65_536
+MAX_GRPC_COALESCE = 65_536
+TARGET_FRAGMENT_PAYLOAD = 1_150
 
+# Fragment classes: the wire freezes these; 5..=255 are reserved.
 CLASS_CONTROL = 0
 CLASS_CURSOR = 1
 CLASS_MEDIA = 2
 CLASS_FEEDBACK = 3
 CLASS_PATH = 4
-CLASS_DATAGRAM = 5
-CLASS_FEC = 6
 
+_CLASS_NAMES = {0: "control", 1: "cursor", 2: "media", 3: "feedback", 4: "path"}
+
+
+def class_name(cls):
+    return _CLASS_NAMES.get(cls, "unknown")
+
+
+def class_from_u8(value):
+    if value > 4:
+        raise ValueError(f"bad class {value}")
+    return value
+
+
+# Priority: 0..=7, lower is higher; 0-1 reserved for control, pointer and
+# feedback — media may not use them.
 PRIO_CONTROL = 0
 PRIO_INPUT = 1
 PRIO_REPORT = 2
@@ -20,6 +45,24 @@ PRIO_CURSOR = 5
 PRIO_MEDIA = 6
 PRIO_REFRESH = 7
 
+# The flags byte: bit 7 is reserved and must be zero.
+FLAG_FIN = 1 << 0            # last fragment of the object
+FLAG_ANCHOR = 1 << 1         # absolute writes applying onto any held state
+FLAG_RETRANSMIT = 1 << 2     # a resend by the sender's own policy
+FLAG_DUP = 1 << 3            # a deliberate duplicate for echo-critical objects
+FLAG_ECHO_REQUESTED = 1 << 4 # receiver must reply with an echo
+FLAG_PROBE = 1 << 5          # a probe object
+FLAG_URGENT = 1 << 6         # control: drain before queued media
+
+
+def flags_from_bits(bits):
+    if bits & 0x80:
+        raise ValueError("bad flags: bit 7 is reserved")
+    return bits
+
+
+# The header-extension TLV type registry. Kinds 0x10..=0xEF are skipped
+# silently; 0xF0..=0xFF are experimental (skipped and counted).
 TLV = {
     "UPDATE_ID": 0x01,
     "UPDATE_BASE": 0x02,
@@ -28,8 +71,14 @@ TLV = {
     "CHAIN_EPOCH": 0x05,
     "REFLECTS_INPUT_SEQ": 0x06,
     "SEND_EPOCH_MS": 0x07,
-    "CELL_COUNT": 0x08,
-    "BUDGET_BYTES": 0x09,
+    "DEADLINE_EPOCH_MS": 0x08,
+    "ECHO_OF_OBJECT_ID": 0x09,
+    "BUDGET_BYTES": 0x0A,
+    "PACE_BPS": 0x0B,
+    "PATH_HINT": 0x0C,
+    "INPUT_SEQ": 0x0D,
+    "CELL_COUNT": 0x0E,
+    "COST_MS": 0x0F,
     "STREAM_ID": 0x10,
     "PATH_ID": 0x13,
     "GREASE": 0x7F,
@@ -38,13 +87,16 @@ TLV = {
 
 class HeaderExt:
     def __init__(self):
-        self.entries = []  # list of (kind, bytes)
+        self.entries = []
 
     def push_u64(self, kind, v):
         self.entries.append((kind, struct.pack("<Q", v)))
 
     def push_u32(self, kind, v):
         self.entries.append((kind, struct.pack("<I", v)))
+
+    def push_u16(self, kind, v):
+        self.entries.append((kind, struct.pack("<H", v)))
 
     def push_u8(self, kind, v):
         self.entries.append((kind, bytes([v])))
@@ -60,28 +112,25 @@ class HeaderExt:
 
     def get_u64(self, kind):
         v = self.get(kind)
-        if v is None or len(v) != 8:
-            return None
-        return struct.unpack("<Q", v)[0]
+        return struct.unpack("<Q", v)[0] if len(v or b"") == 8 else None
 
     def get_u32(self, kind):
         v = self.get(kind)
-        if v is None or len(v) != 4:
-            return None
-        return struct.unpack("<I", v)[0]
+        return struct.unpack("<I", v)[0] if len(v or b"") == 4 else None
+
+    def get_u16(self, kind):
+        v = self.get(kind)
+        return struct.unpack("<H", v)[0] if len(v or b"") == 2 else None
 
     def get_u8(self, kind):
         v = self.get(kind)
-        if v is None or len(v) != 1:
-            return None
-        return v[0]
+        return v[0] if len(v or b"") == 1 else None
 
     def get_u16_pair(self, kind):
         v = self.get(kind)
-        if v is None or len(v) != 4:
+        if len(v or b"") != 4:
             return None
-        a, b = struct.unpack("<HH", v)
-        return a, b
+        return struct.unpack("<HH", v)
 
     def encoded_len(self):
         return sum(2 + len(v) for _, v in self.entries)
@@ -89,6 +138,8 @@ class HeaderExt:
     def encode(self):
         out = bytearray()
         for kind, v in self.entries:
+            if len(v) > 255:
+                raise ValueError("tlv value too long")
             out.append(kind)
             out.append(len(v))
             out.extend(v)
@@ -114,7 +165,8 @@ class HeaderExt:
 
 class UpdateMeta:
     def __init__(self, update_id=0, update_base=0, part_index=0, part_count=1,
-                 update_bytes=0, chain_epoch=0, reflects_input_seq=0, stream_id=0, path_id=0, send_epoch_ms=0):
+                 update_bytes=0, chain_epoch=0, reflects_input_seq=0, stream_id=0,
+                 path_id=0, send_epoch_ms=0):
         self.update_id = update_id
         self.update_base = update_base
         self.part_index = part_index
@@ -141,42 +193,35 @@ class UpdateMeta:
 
     @classmethod
     def from_ext(cls, ext):
-        uid = ext.get_u64(TLV["UPDATE_ID"])
-        if uid is None:
-            return None
-        ub = ext.get_u64(TLV["UPDATE_BASE"])
+        def g64(name):
+            v = ext.get_u64(TLV[name])
+            return v if v is not None else 0
+
+        def g32(name):
+            v = ext.get_u32(TLV[name])
+            return v if v is not None else 0
+
         pair = ext.get_u16_pair(TLV["PART"])
         pi, pc = (pair if pair else (0, 1))
-        ubytes = ext.get_u32(TLV["UPDATE_BYTES"])
-        ce = ext.get_u32(TLV["CHAIN_EPOCH"])
-        ris = ext.get_u64(TLV["REFLECTS_INPUT_SEQ"])
-        sid = ext.get_u32(TLV["STREAM_ID"])
         pid = ext.get_u8(TLV["PATH_ID"])
-        sem = ext.get_u64(TLV["SEND_EPOCH_MS"])
         return cls(
-            update_id=uid,
-            update_base=ub if ub is not None else 0,
+            update_id=g64("UPDATE_ID"),
+            update_base=g64("UPDATE_BASE"),
             part_index=pi,
             part_count=pc,
-            update_bytes=ubytes if ubytes is not None else 0,
-            chain_epoch=ce if ce is not None else 0,
-            reflects_input_seq=ris if ris is not None else 0,
-            stream_id=sid if sid is not None else 0,
+            update_bytes=g32("UPDATE_BYTES"),
+            chain_epoch=g32("CHAIN_EPOCH"),
+            reflects_input_seq=g64("REFLECTS_INPUT_SEQ"),
+            stream_id=g32("STREAM_ID"),
             path_id=pid if pid is not None else 0,
-            send_epoch_ms=sem if sem is not None else 0,
+            send_epoch_ms=g64("SEND_EPOCH_MS"),
         )
-
-    def check_against(self, other):
-        if self != other and (self.update_id, self.update_base, self.part_index, self.part_count,
-                              self.update_bytes, self.chain_epoch, self.reflects_input_seq, self.send_epoch_ms) != \
-           (other.update_id, other.update_base, other.part_index, other.part_count,
-            other.update_bytes, other.chain_epoch, other.reflects_input_seq, other.send_epoch_ms):
-            raise ValueError("meta mismatch")
 
 
 class FragmentHeader:
     def __init__(self, version=1, cls=CLASS_MEDIA, flags=0, priority=PRIO_MEDIA,
-                 object_id=0, fragment_index=0, fragment_count=1, payload_len=0, header_ext_len=0):
+                 object_id=0, fragment_index=0, fragment_count=1, payload_len=0,
+                 header_ext_len=0):
         self.version = version
         self.cls = cls
         self.flags = flags
@@ -196,8 +241,8 @@ class Fragment:
 
     def encode(self):
         ext_bytes = self.ext.encode()
-        self.header.payload_len = len(self.payload)
-        self.header.header_ext_len = len(ext_bytes)
+        if len(ext_bytes) > MAX_HEADER_EXT:
+            raise ValueError("bad ext: too long")
         out = bytearray()
         out += FRAGMENT_MAGIC
         out.append(self.header.version)
@@ -222,8 +267,8 @@ class Fragment:
         version = buf[4]
         if version != MEDIA_PROTOCOL_VERSION:
             raise ValueError("unsupported version")
-        fclass = buf[5]
-        flags = buf[6]
+        fclass = class_from_u8(buf[5])
+        flags = flags_from_bits(buf[6])
         prio = buf[7]
         if prio > 7:
             raise ValueError("bad priority")
@@ -232,10 +277,10 @@ class Fragment:
         frag_count = struct.unpack("<H", buf[14:16])[0]
         payload_len = struct.unpack("<I", buf[16:20])[0]
         ext_len = struct.unpack("<H", buf[20:22])[0]
-        if frag_count == 0 or frag_index >= frag_count:
+        if frag_count == 0 or frag_count > MAX_FRAGMENT_COUNT or frag_index >= frag_count:
             raise ValueError("bad fragment")
         if fclass == CLASS_MEDIA and prio <= PRIO_INPUT:
-            raise ValueError("bad priority")
+            raise ValueError("bad priority: media may not use the reserved band")
         if ext_len != 0 and ext_len < 2:
             raise ValueError("bad ext")
         if ext_len > MAX_HEADER_EXT:
@@ -254,20 +299,27 @@ class Fragment:
         return cls(header, ext, payload), payload_end
 
 
-# Carrier
+# The carriers, with the budgets the specification freezes.
 CARRIER_WS = 0
 CARRIER_GRPC = 1
+CARRIER_DATA_CHANNEL = 2
+CARRIER_REPAIR_CHANNEL = 3
+CARRIER_CONTROL_CHANNEL = 4
+
+_DATAGRAM_CARRIERS = {CARRIER_DATA_CHANNEL, CARRIER_REPAIR_CHANNEL, CARRIER_CONTROL_CHANNEL}
 
 
 def carrier_fragment_payload_max(c):
-    if c == CARRIER_WS:
-        return 1024
+    if c in (CARRIER_WS, CARRIER_GRPC):
+        return MAX_STREAM_FRAGMENT
+    return TARGET_FRAGMENT_PAYLOAD
+
+
+def carrier_message_cap(c):
     if c == CARRIER_GRPC:
-        return 4096
-    return 1024
+        return MAX_GRPC_COALESCE
+    return carrier_fragment_payload_max(c)
 
 
-# Fragment flags
-FLAG_ANCHOR = 1 << 0
-FLAG_ECHO_REQUESTED = 1 << 1
-FLAG_DUPLICATE = 1 << 2
+def carrier_is_datagram(c):
+    return c in _DATAGRAM_CARRIERS
