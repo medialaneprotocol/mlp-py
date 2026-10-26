@@ -80,6 +80,8 @@ TLV = {
     "CELL_COUNT": 0x0E,
     "COST_MS": 0x0F,
     "STREAM_ID": 0x10,
+    "FEC_GROUP_ID": 0x11,
+    "FEC_K": 0x12,
     "PATH_ID": 0x13,
     "GREASE": 0x7F,
 }
